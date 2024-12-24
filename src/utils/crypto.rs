@@ -188,6 +188,8 @@ pub enum KnownSignatureType {
     ES256,
     /// Elliptic curve DSA using K-256 and SHA-256
     ES256K,
+    /// Elliptic curve DSA using P-384 and SHA-384
+    ES384,
 }
 
 impl From<SignatureType> for KnownSignatureType {
@@ -196,6 +198,7 @@ impl From<SignatureType> for KnownSignatureType {
             SignatureType::EdDSA => KnownSignatureType::EdDSA,
             SignatureType::ES256 => KnownSignatureType::ES256,
             SignatureType::ES256K => KnownSignatureType::ES256K,
+            SignatureType::ES384 => KnownSignatureType::ES384,
         }
     }
 }
@@ -206,6 +209,7 @@ impl From<KnownSignatureType> for SignatureType {
             KnownSignatureType::EdDSA => SignatureType::EdDSA,
             KnownSignatureType::ES256 => SignatureType::ES256,
             KnownSignatureType::ES256K => SignatureType::ES256K,
+            KnownSignatureType::ES384 => SignatureType::ES384,
         }
     }
 }
