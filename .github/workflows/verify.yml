@@ -13,7 +13,7 @@ env:
 jobs:
 
   release-ready:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     if: github.event_name == 'pull_request' && github.event.pull_request.base.ref == 'stable'
     defaults:
       run:
@@ -78,7 +78,7 @@ jobs:
   verify:
     strategy:
       matrix:
-        os: [ macos-latest, windows-latest, ubuntu-latest ]
+        os: [ macos-26, windows-latest, ubuntu-24.04 ]
     runs-on: ${{ matrix.os }}
 
     steps:
@@ -118,7 +118,7 @@ jobs:
   verify-wasm:
     strategy:
       matrix:
-        os: [ macos-latest, ubuntu-latest ]
+        os: [ macos-26, ubuntu-24.04 ]
         node: [ 16, 18, 20, 22 ]
       fail-fast: false
     runs-on: ${{ matrix.os }}
@@ -220,7 +220,7 @@ jobs:
   verify-uniffi:
     strategy:
       matrix:
-        os: [ macos-latest, windows-latest, ubuntu-latest ]
+        os: [ macos-26, windows-latest, ubuntu-24.04 ]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
