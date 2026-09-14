@@ -2,7 +2,7 @@ use crate::error::{err_msg, ErrorKind, ResultExt, ToResult};
 use crate::jwk::FromJwkValue;
 use crate::secrets::{KidOrJwk, KnownSignatureType};
 use crate::utils::crypto::{AsKnownKeyPair, JoseKDF, KnownKeyAlg, KnownKeyPair};
-use crate::utils::did::{Codec, _from_multicodec};
+use crate::utils::did::{_from_multicodec, Codec};
 use crate::{error::Result, secrets::KeyManagementService};
 use askar_crypto::{
     alg::{
