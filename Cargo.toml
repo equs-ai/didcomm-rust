@@ -28,6 +28,7 @@ edition = '2018'
 description = 'DIDComm for Rust'
 license = 'Apache-2.0'
 repository = 'https://github.com/equs-ai/didcomm-rust'
+exclude = ['.github/', '.gitignore', 'Specs/', 'docs/', 'renovate.json', 'wrappers/']
 readme = 'README.md'
 
 [lib]
