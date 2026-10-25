@@ -5,6 +5,16 @@ All notable changes to this fork are documented here.
 This is a fork of [sicpa-dlab/didcomm-rust](https://github.com/sicpa-dlab/didcomm-rust),
 diverged at `9e79b48`.
 
+## 0.1.1
+
+### Fixed
+
+- `Message::unpack` rejects a message whose plaintext `from` is not the DID of
+  the authcrypt `skid` or of the signer `kid` (DIDComm Messaging v2.1, Message
+  Layer Addressing Consistency).
+
+## 0.1.0
+
 ### Changed
 
 - `askar-crypto` comes from crates.io instead of a pinned `aries-askar` git
