@@ -44,7 +44,8 @@ impl Message {
     /// # Errors
     /// - `DIDNotResolved` Sender or recipient DID not found.
     /// - `DIDUrlNotFound` DID doesn't contain mentioned DID Urls (for ex., key id)
-    /// - `MessageMalformed` message doesn't correspond to DID Comm or has invalid encryption or signatures.
+    /// - `MessageMalformed` message doesn't correspond to DID Comm or has invalid encryption or signatures,
+    ///   or its `from` is not the DID of the authcrypt sender or signer key.
     /// - `Unsupported` Used crypto or method is unsupported.
     /// - `SecretNotFound` No recipient secrets found.
     /// - `InvalidState` Indicates library error.
@@ -119,7 +120,31 @@ impl Message {
                 )
             })?;
 
+        msg._validate_unpack(&metadata)?;
+
         Ok((msg, metadata))
+    }
+
+    /// DIDComm Messaging v2.1, Message Layer Addressing Consistency: a plaintext `from` must
+    /// be the DID of the authcrypt `skid` and of the signer `kid`.
+    fn _validate_unpack(&self, metadata: &UnpackMetadata) -> Result<()> {
+        match (&self.from, &metadata.encrypted_from_kid) {
+            (Some(ref from), Some(ref skid)) if did_or_url(skid).0 != from => Err(err_msg(
+                ErrorKind::Malformed,
+                "`message.from` value is not equal to `skid` value's DID",
+            ))?,
+            _ => {}
+        }
+
+        match (&self.from, &metadata.sign_from) {
+            (Some(ref from), Some(ref kid)) if did_or_url(kid).0 != from => Err(err_msg(
+                ErrorKind::Malformed,
+                "`message.from` value is not equal to signer `kid` value's DID",
+            ))?,
+            _ => {}
+        }
+
+        Ok(())
     }
 
     async fn _try_unwrap_forwarded_message<'dr, 'sr>(
@@ -251,7 +276,7 @@ async fn has_key_agreement_secret<'dr, 'sr>(
 mod test {
     use crate::{
         did::resolvers::ExampleDIDResolver,
-        message::MessagingServiceMetadata,
+        message::{pack_encrypted::authcrypt, MessagingServiceMetadata},
         protocols::routing::wrap_in_forward,
         secrets::resolvers::ExampleKMS,
         test_vectors::{
@@ -262,9 +287,9 @@ mod test {
             BOB_DID_DOC, BOB_SECRETS, BOB_SECRET_KEY_AGREEMENT_KEY_P256_1,
             BOB_SECRET_KEY_AGREEMENT_KEY_P256_2, BOB_SECRET_KEY_AGREEMENT_KEY_X25519_1,
             BOB_SECRET_KEY_AGREEMENT_KEY_X25519_2, BOB_SECRET_KEY_AGREEMENT_KEY_X25519_3,
-            BOB_SERVICE, CHARLIE_AUTH_METHOD_25519, CHARLIE_DID_DOC, ENCRYPTED_MSG_ANON_XC20P_1,
-            ENCRYPTED_MSG_ANON_XC20P_2, ENCRYPTED_MSG_AUTH_P256, ENCRYPTED_MSG_AUTH_P256_SIGNED,
-            ENCRYPTED_MSG_AUTH_X25519, FROM_PRIOR_FULL,
+            BOB_SERVICE, CHARLIE_AUTH_METHOD_25519, CHARLIE_DID, CHARLIE_DID_DOC, CHARLIE_SECRETS,
+            ENCRYPTED_MSG_ANON_XC20P_1, ENCRYPTED_MSG_ANON_XC20P_2, ENCRYPTED_MSG_AUTH_P256,
+            ENCRYPTED_MSG_AUTH_P256_SIGNED, ENCRYPTED_MSG_AUTH_X25519, FROM_PRIOR_FULL,
             INVALID_ENCRYPTED_MSG_ANON_P256_EPK_WRONG_POINT,
             INVALID_PLAINTEXT_MSG_ATTACHMENTS_AS_INT_ARRAY,
             INVALID_PLAINTEXT_MSG_ATTACHMENTS_AS_STRING,
@@ -2035,6 +2060,64 @@ mod test {
         _verify_unpack_malformed(
             &INVALID_PLAINTEXT_MSG_ATTACHMENTS_NULL_DATA,
             "Malformed: Message is not a valid JWE, JWS or JWM",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn unpack_works_from_not_matching_skid() {
+        let did_resolver = ExampleDIDResolver::new(vec![
+            ALICE_DID_DOC.clone(),
+            BOB_DID_DOC.clone(),
+            CHARLIE_DID_DOC.clone(),
+        ]);
+
+        let charlie_kms = ExampleKMS::new(CHARLIE_SECRETS.clone());
+
+        let plaintext = MESSAGE_SIMPLE
+            .pack_plaintext(&did_resolver)
+            .await
+            .expect("Unable pack_plaintext");
+
+        // `pack_encrypted` refuses this `from`; the sender builds the envelope directly.
+        let (msg, _, _) = authcrypt(
+            BOB_DID,
+            CHARLIE_DID,
+            &did_resolver,
+            &charlie_kms,
+            plaintext.as_bytes(),
+            &AuthCryptAlg::A256cbcHs512Ecdh1puA256kw,
+            &AnonCryptAlg::default(),
+            false,
+        )
+        .await
+        .expect("Unable authcrypt");
+
+        _verify_unpack_malformed(
+            &msg,
+            "Malformed: `message.from` value is not equal to `skid` value's DID",
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    async fn unpack_works_from_not_matching_signer() {
+        let did_resolver = ExampleDIDResolver::new(vec![
+            ALICE_DID_DOC.clone(),
+            BOB_DID_DOC.clone(),
+            CHARLIE_DID_DOC.clone(),
+        ]);
+
+        let charlie_kms = ExampleKMS::new(CHARLIE_SECRETS.clone());
+
+        let (msg, _) = MESSAGE_SIMPLE
+            .pack_signed(CHARLIE_DID, &did_resolver, &charlie_kms)
+            .await
+            .expect("Unable pack_signed");
+
+        _verify_unpack_malformed(
+            &msg,
+            "Malformed: `message.from` value is not equal to signer `kid` value's DID",
         )
         .await;
     }

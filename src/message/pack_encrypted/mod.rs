@@ -17,7 +17,7 @@ use crate::{
 
 pub(crate) use self::anoncrypt::anoncrypt;
 
-use self::authcrypt::authcrypt;
+pub(crate) use self::authcrypt::authcrypt;
 
 impl Message {
     /// Produces `DIDComm Encrypted Message`
