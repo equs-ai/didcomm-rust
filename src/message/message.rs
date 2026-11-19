@@ -3,7 +3,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 
 use super::Attachment;
-use crate::error::{err_msg, ErrorKind, Result, ToResult};
+use crate::{
+    error::{err_msg, ErrorKind, Result, ToResult},
+    utils::did::did_of_header,
+};
 
 /// Wrapper for plain message. Provides helpers for message building and packing/unpacking.
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
@@ -97,6 +100,25 @@ impl Message {
             ))?;
         }
         Ok(self)
+    }
+
+    /// Checks that `from` and each `to` element are DIDs or DID URLs without a fragment.
+    pub(crate) fn validate_addresses(&self, kind: ErrorKind) -> Result<()> {
+        if matches!(self.from, Some(ref from) if did_of_header(from).is_none()) {
+            Err(err_msg(
+                kind,
+                "`message.from` value is not a DID or a DID URL without a fragment",
+            ))?;
+        }
+
+        if matches!(self.to, Some(ref to) if to.iter().any(|to| did_of_header(to).is_none())) {
+            Err(err_msg(
+                kind,
+                "`message.to` element is not a DID or a DID URL without a fragment",
+            ))?;
+        }
+
+        Ok(())
     }
 }
 

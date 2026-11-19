@@ -1,6 +1,7 @@
 use crate::{
     did::DIDResolver,
     error::{err_msg, ErrorKind, Result, ResultExt},
+    utils::did::did_of_header,
     FromPrior, Message,
 };
 
@@ -53,8 +54,9 @@ impl Message {
         if let Some(from_prior) = from_prior {
             from_prior.validate_pack(from_prior_issuer_kid)?;
 
+            // `from` may be a DID URL without a fragment; `sub` is the new DID.
             if let Some(ref from) = self.from {
-                if &from_prior.sub != from {
+                if did_of_header(from) != Some(from_prior.sub.as_str()) {
                     Err(err_msg(
                         ErrorKind::Malformed,
                         "from_prior `sub` value is not equal to message `from` value",
@@ -153,6 +155,40 @@ mod tests {
             Some(&CHARLIE_SECRET_AUTH_KEY_ED25519.id)
         );
         assert_eq!(unpack_metadata.from_prior.as_ref(), Some(&*FROM_PRIOR_FULL));
+    }
+
+    #[tokio::test]
+    async fn pack_plaintext_works_from_prior_from_did_url() {
+        let did_resolver = ExampleDIDResolver::new(vec![
+            ALICE_DID_DOC.clone(),
+            BOB_DID_DOC.clone(),
+            CHARLIE_DID_DOC.clone(),
+        ]);
+        let bob_kms = ExampleKMS::new(BOB_SECRETS.clone());
+
+        let msg = Message {
+            from: Some(format!(
+                "{}?service=agent",
+                MESSAGE_FROM_PRIOR_FULL.from.as_ref().unwrap()
+            )),
+            ..MESSAGE_FROM_PRIOR_FULL.clone()
+        };
+
+        let packed_msg = msg
+            .pack_plaintext(&did_resolver)
+            .await
+            .expect("Unable pack_plaintext");
+
+        let (unpacked_msg, _) = Message::unpack(
+            &packed_msg,
+            &did_resolver,
+            &bob_kms,
+            &UnpackOptions::default(),
+        )
+        .await
+        .expect("Unable unpack");
+
+        assert_eq!(unpacked_msg, msg);
     }
 
     #[tokio::test]

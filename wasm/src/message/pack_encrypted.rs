@@ -93,8 +93,9 @@ interface Message {
      * It's possible to add non-repudiation by providing `sign_by` parameter.
      *
      * @param `to` recipient DID or key ID the sender uses encryption.
+     *    Its DID must be the DID of an element of the plaintext `to`, if set.
      * @param `from` a sender DID or key ID. If set message will be repudiable authenticated or anonymous otherwise.
-     *    Must match `from` header in Plaintext if the header is set.
+     *    Its DID must be the DID of the plaintext `from`, if set.
      * @param `sign_by` if `Some` message will be additionally signed to provide additional non-repudiable authentication
      *    by provided DID/Key. Signed messages are only necessary when the origin of plaintext must be provable
      *    to third parties, or when the sender can’t be proven to the recipient by authenticated encryption because
