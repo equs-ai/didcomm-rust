@@ -66,6 +66,8 @@ impl Message {
     ///   used messaging service.
     ///
     /// # Errors
+    /// - `IllegalArgument` `to`, `from` or `sign_by` is not a DID or key ID, or the plaintext `to`
+    ///   or `from` is not a DID or a DID URL without a fragment, or does not match them.
     /// - `DIDNotResolved` Sender or recipient DID not found.
     /// - `DIDUrlNotFound` DID doesn't contain mentioned DID Urls (for ex., key id)
     /// - `SecretNotFound` Sender secret is not found.
@@ -174,6 +176,24 @@ impl Message {
             ))?,
             _ => {}
         }
+
+        // A key ID is a DID URL with only a fragment; a path or query cannot be resolved.
+        if did_or_url(to).0.contains(['/', '?']) {
+            Err(err_msg(
+                ErrorKind::IllegalArgument,
+                "`to` value is not a DID or key ID",
+            ))?;
+        }
+
+        match from {
+            Some(from) if did_or_url(from).0.contains(['/', '?']) => Err(err_msg(
+                ErrorKind::IllegalArgument,
+                "`from` value is not a DID or key ID",
+            ))?,
+            _ => {}
+        }
+
+        self.validate_addresses(ErrorKind::IllegalArgument)?;
 
         let (to_did, _) = did_or_url(to);
 
@@ -2434,6 +2454,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn pack_encrypted_works_to_or_from_with_path_or_query() {
+        let did_resolver =
+            ExampleDIDResolver::new(vec![ALICE_DID_DOC.clone(), BOB_DID_DOC.clone()]);
+
+        let secrets_resolver = ExampleKMS::new(ALICE_SECRETS.clone());
+
+        let bob_url = format!("{}?service=agent", BOB_DID);
+        let alice_url = format!("{}/path", ALICE_DID);
+
+        for (to, from, exp_err) in [
+            (
+                bob_url.as_str(),
+                ALICE_DID,
+                "Illegal argument: `to` value is not a DID or key ID",
+            ),
+            (
+                BOB_DID,
+                alice_url.as_str(),
+                "Illegal argument: `from` value is not a DID or key ID",
+            ),
+        ] {
+            let mut msg = MESSAGE_SIMPLE.clone();
+            msg.to = Some(vec![to.to_owned()]);
+            msg.from = Some(from.to_owned());
+
+            let err = msg
+                .pack_encrypted(
+                    to,
+                    from.into(),
+                    None,
+                    &did_resolver,
+                    &secrets_resolver,
+                    &PackEncryptedOptions {
+                        forward: false,
+                        ..PackEncryptedOptions::default()
+                    },
+                )
+                .await
+                .expect_err("res is ok");
+
+            assert_eq!(err.kind(), ErrorKind::IllegalArgument);
+            assert_eq!(format!("{}", err), exp_err);
+        }
+    }
+
+    #[tokio::test]
     async fn pack_encrypted_works_from_not_did_or_did_url_in_msg() {
         let did_resolver =
             ExampleDIDResolver::new(vec![ALICE_DID_DOC.clone(), BOB_DID_DOC.clone()]);
@@ -2594,7 +2660,7 @@ mod tests {
 
         assert_eq!(
             format!("{}", err),
-            "Illegal argument: `message.from` value is not equal to `from` value's DID"
+            "Illegal argument: `message.from` value is not a DID or a DID URL without a fragment"
         );
     }
 
@@ -2626,7 +2692,7 @@ mod tests {
 
         assert_eq!(
             format!("{}", err),
-            "Illegal argument: `message.to` value does not contain `to` value's DID"
+            "Illegal argument: `message.to` element is not a DID or a DID URL without a fragment"
         );
     }
 

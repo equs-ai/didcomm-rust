@@ -28,13 +28,15 @@ pub(crate) fn did_or_url(did_or_url: &str) -> (&str, Option<&str>) {
 }
 
 /// The DID of a `from` or `to` header: a DID, or a DID URL with no fragment (DIDComm v2.1).
-/// A DID cannot contain `/` or `?`, so it ends at the first of them. `None` on a fragment.
+/// A DID cannot contain `/` or `?`, so it ends at the first of them. `None` if the value has a
+/// fragment or does not start with a DID.
 pub(crate) fn did_of_header(value: &str) -> Option<&str> {
     if value.contains('#') {
         return None;
     }
 
-    Some(value.find(['/', '?']).map_or(value, |end| &value[..end]))
+    let did = value.find(['/', '?']).map_or(value, |end| &value[..end]);
+    is_did(did).then_some(did)
 }
 
 impl AsKnownKeyPair for VerificationMethod {
@@ -525,6 +527,10 @@ mod tests {
         );
         assert_eq!(did_of_header("did:example:alice#key-1"), None);
         assert_eq!(did_of_header("did:example:alice/path?query#key-1"), None);
+        assert_eq!(did_of_header(""), None);
+        assert_eq!(did_of_header("foo"), None);
+        assert_eq!(did_of_header("?x"), None);
+        assert_eq!(did_of_header("/x"), None);
     }
 
     #[test]

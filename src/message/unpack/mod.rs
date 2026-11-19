@@ -45,8 +45,8 @@ impl Message {
     /// - `DIDNotResolved` Sender or recipient DID not found.
     /// - `DIDUrlNotFound` DID doesn't contain mentioned DID Urls (for ex., key id)
     /// - `MessageMalformed` message doesn't correspond to DID Comm or has invalid encryption or signatures,
-    ///   the DID of its `from` is not the DID of the authcrypt sender or signer key, or its `to` does
-    ///   not contain the DID of the recipient key.
+    ///   or its `from` or `to` is not a DID or a DID URL without a fragment, or does not match the
+    ///   DID of the sender, signer or recipient key.
     /// - `Unsupported` Used crypto or method is unsupported.
     /// - `SecretNotFound` No recipient secrets found.
     /// - `InvalidState` Indicates library error.
@@ -126,10 +126,12 @@ impl Message {
         Ok((msg, metadata))
     }
 
-    /// DIDComm Messaging v2.1, Message Layer Addressing Consistency: a plaintext `from` must
-    /// be the DID of the authcrypt `skid` and of the signer `kid`, and a plaintext `to` must
-    /// contain the DID of the recipient `kid`. Headers may be DID URLs, so DIDs are compared.
+    /// DIDComm Messaging v2.1: `from` and `to` elements are DIDs or DID URLs without a fragment
+    /// (Message Headers); `from` is the DID of the `skid` and the signer `kid`, and `to` contains
+    /// the DID of the recipient `kid` (Message Layer Addressing Consistency).
     fn _validate_unpack(&self, metadata: &UnpackMetadata) -> Result<()> {
+        self.validate_addresses(ErrorKind::Malformed)?;
+
         match (&self.to, &metadata.encrypted_to_kids) {
             (Some(ref to), Some(ref kids))
                 if !kids.iter().all(|kid| {
@@ -2356,11 +2358,8 @@ mod test {
             CHARLIE_DID_DOC.clone(),
         ]);
 
-        // A lookalike DID and a DID URL with a fragment do not match.
-        for to in [
-            format!("{}x?service=agent", BOB_DID),
-            format!("{}#key-x25519-1", BOB_DID),
-        ] {
+        // A lookalike DID does not match.
+        for to in [format!("{}x?service=agent", BOB_DID)] {
             let plaintext = Message {
                 to: Some(vec![to]),
                 ..MESSAGE_SIMPLE.clone()
@@ -2459,11 +2458,8 @@ mod test {
 
         let alice_kms = ExampleKMS::new(ALICE_SECRETS.clone());
 
-        // A lookalike DID and a DID URL with a fragment do not match.
-        for from in [
-            format!("{}x?service=agent", ALICE_DID),
-            format!("{}#key-x25519-1", ALICE_DID),
-        ] {
+        // A lookalike DID does not match.
+        for from in [format!("{}x?service=agent", ALICE_DID)] {
             let message = Message {
                 from: Some(from),
                 ..MESSAGE_SIMPLE.clone()
@@ -2512,6 +2508,58 @@ mod test {
                 "Malformed: `message.from` value is not equal to signer `kid` value's DID",
             )
             .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn unpack_works_address_with_fragment_or_not_did() {
+        let did_resolver = ExampleDIDResolver::new(vec![
+            ALICE_DID_DOC.clone(),
+            BOB_DID_DOC.clone(),
+            CHARLIE_DID_DOC.clone(),
+        ]);
+
+        // Rejected even without an authcrypt or sign layer.
+        for (from, to, exp_err) in [
+            (
+                Some(format!("{}#key-x25519-1", ALICE_DID)),
+                None,
+                "Malformed: `message.from` value is not a DID or a DID URL without a fragment",
+            ),
+            (
+                Some("not-a-did".to_owned()),
+                None,
+                "Malformed: `message.from` value is not a DID or a DID URL without a fragment",
+            ),
+            (
+                None,
+                Some(vec![
+                    BOB_DID.to_owned(),
+                    format!("{}#key-x25519-1", BOB_DID),
+                ]),
+                "Malformed: `message.to` element is not a DID or a DID URL without a fragment",
+            ),
+        ] {
+            let plaintext = Message {
+                from,
+                to,
+                ..MESSAGE_SIMPLE.clone()
+            }
+            .pack_plaintext(&did_resolver)
+            .await
+            .expect("Unable pack_plaintext");
+
+            let (anoncrypted, _) = anoncrypt(
+                BOB_DID,
+                &did_resolver,
+                plaintext.as_bytes(),
+                &AnonCryptAlg::default(),
+            )
+            .await
+            .expect("Unable anoncrypt");
+
+            _verify_unpack_malformed(&plaintext, exp_err).await;
+            _verify_unpack_malformed(&anoncrypted, exp_err).await;
         }
     }
 

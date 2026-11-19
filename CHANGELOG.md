@@ -15,11 +15,15 @@ diverged at `9e79b48`.
   as the `to` header allows; its DID is what is compared.
 - `Message::unpack` compares the DID of `from` with the authcrypt `skid` and the
   signer `kid`, so a `from` that is a DID URL without a fragment, as the `from`
-  header allows, is no longer rejected. A `from` or `to` with a fragment is
-  still rejected.
+  header allows, is no longer rejected.
+- `Message::unpack` rejects any message whose `from` or a `to` element is not a
+  DID or a DID URL without a fragment, whatever its layers.
 - `Message::pack_encrypted` accepts a plaintext whose `to` or `from` is a DID URL
   without a fragment, comparing its DID with the `to` and `from` arguments, so
-  it can send what `Message::unpack` accepts.
+  it can send what `Message::unpack` accepts. It rejects a `to` or `from`
+  header with a fragment, and a `to` or `from` argument with a path or query.
+- `Message::pack_plaintext` compares `from_prior.sub` with the DID of `from`, so
+  a DID rotation message can have a `from` that is a DID URL.
 
 ## 0.1.1
 
